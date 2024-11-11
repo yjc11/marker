@@ -1,4 +1,5 @@
 import os
+
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 os.environ["IN_STREAMLIT"] = "true"
 os.environ["PDFTEXT_CPU_WORKERS"] = "1"
@@ -7,22 +8,27 @@ import base64
 import io
 import re
 import tempfile
-from typing import List, Any, Dict
+from typing import Any, Dict, List
 
 import pypdfium2
 import streamlit as st
+from surya.languages import CODE_TO_LANGUAGE
 
 from marker.convert import convert_single_pdf
 from marker.models import load_all_models
-from surya.languages import CODE_TO_LANGUAGE
+
 
 @st.cache_resource()
 def load_models():
     return load_all_models()
 
 
-def convert_pdf(fname: str, langs: List[str] | None, max_pages: int | None, ocr_all_pages: bool) -> (str, Dict[str, Any], dict):
-    full_text, images, out_meta = convert_single_pdf(fname, model_lst, max_pages=max_pages, langs=langs, ocr_all_pages=ocr_all_pages)
+def convert_pdf(
+    fname: str, langs: List[str] | None, max_pages: int | None, start_page: int | None, ocr_all_pages: bool
+) -> (str, Dict[str, Any], dict):
+    full_text, images, out_meta = convert_single_pdf(
+        fname, model_lst, max_pages=max_pages, langs=langs, start_page=start_page, ocr_all_pages=ocr_all_pages
+    )
     return full_text, images, out_meta
 
 
@@ -72,23 +78,36 @@ def page_count(pdf_file):
 
 
 st.set_page_config(layout="wide")
-col1, col2 = st.columns([.5, .5])
+col1, col2 = st.columns([0.5, 0.5])
 
 model_lst = load_models()
 
 
-st.markdown("""
+st.markdown(
+    """
 # Marker Demo
 
 This app will let you try marker, a PDF -> Markdown converter. It works with any languages, and extracts images, tables, equations, etc.
 
 Find the project [here](https://github.com/VikParuchuri/marker).
-""")
+"""
+)
 
 in_file = st.sidebar.file_uploader("PDF file:", type=["pdf"])
-languages = st.sidebar.multiselect("Languages", sorted(list(CODE_TO_LANGUAGE.values())), default=[], max_selections=4, help="Select the languages in the pdf (if known) to improve OCR accuracy.  Optional.")
-max_pages = st.sidebar.number_input("Max pages to parse", min_value=1, value=10, help="Optional maximum number of pages to convert")
-ocr_all_pages = st.sidebar.checkbox("Force OCR on all pages", help="Force OCR on all pages, even if they are images", value=False)
+languages = st.sidebar.multiselect(
+    "Languages",
+    sorted(list(CODE_TO_LANGUAGE.values())),
+    default=[],
+    max_selections=4,
+    help="Select the languages in the pdf (if known) to improve OCR accuracy.  Optional.",
+)
+start_page = st.sidebar.number_input("Start page", min_value=1, value=1, help="Optional start page number")
+max_pages = st.sidebar.number_input(
+    "Max pages to parse", min_value=1, value=10, help="Optional maximum number of pages to convert"
+)
+ocr_all_pages = st.sidebar.checkbox(
+    "Force OCR on all pages", help="Force OCR on all pages, even if they are images", value=False
+)
 
 if in_file is None:
     st.stop()
@@ -112,8 +131,7 @@ with tempfile.NamedTemporaryFile(suffix=".pdf") as temp_pdf:
     temp_pdf.write(in_file.getvalue())
     temp_pdf.seek(0)
     filename = temp_pdf.name
-    md_text, images, out_meta = convert_pdf(filename, languages, max_pages, ocr_all_pages)
+    md_text, images, out_meta = convert_pdf(filename, languages, max_pages, start_page - 1, ocr_all_pages)
 md_text = markdown_insert_images(md_text, images)
 with col2:
     st.markdown(md_text, unsafe_allow_html=True)
-
